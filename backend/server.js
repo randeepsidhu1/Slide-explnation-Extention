@@ -5,11 +5,11 @@ import { explainWithGemini } from "./gemini-provider.js";
 const MAX_BODY_BYTES = 12 * 1024 * 1024;
 const imagePattern = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
 
-export function createServer({ allowedExtensionId = process.env.EXTENSION_ID, explain = (image) => {
+export function createServer({ allowedExtensionId = process.env.EXTENSION_ID, explain = (image, page) => {
   if (process.env.GEMINI_UNBILLED_PROJECT_CONFIRMED !== "1") {
     throw new Error("Confirm your key belongs to an unbilled Free-tier project by setting GEMINI_UNBILLED_PROJECT_CONFIRMED=1.");
   }
-  return explainWithGemini(image, { apiKey: process.env.GEMINI_API_KEY });
+  return explainWithGemini(image, { apiKey: process.env.GEMINI_API_KEY, page });
 } } = {}) {
   return http.createServer(async (request, response) => {
     const origin = request.headers.origin || "";
@@ -34,11 +34,18 @@ export function createServer({ allowedExtensionId = process.env.EXTENSION_ID, ex
         raw += chunk;
         if (raw.length > MAX_BODY_BYTES) return send(response, 413, { error: "Screenshot is too large." });
       }
-      const { image } = JSON.parse(raw);
+      const payload = JSON.parse(raw);
+      const { image, page } = payload || {};
       if (typeof image !== "string" || !imagePattern.test(image)) {
         return send(response, 400, { error: "Expected a JPEG screenshot." });
       }
-      const explanation = await explain(image);
+      if (page !== undefined && (!page || typeof page !== "object" || Array.isArray(page) ||
+        !Number.isInteger(page.number) || !Number.isInteger(page.total) ||
+        page.number < 1 || page.total > 500 || page.number > page.total ||
+        typeof page.text !== "string" || page.text.length > 100000)) {
+        return send(response, 400, { error: "Expected valid PDF page context (up to 500 pages and 100000 text characters)." });
+      }
+      const explanation = await explain(image, page);
       return send(response, 200, { explanation });
     } catch (error) {
       const message = error instanceof SyntaxError ? "Invalid JSON." :

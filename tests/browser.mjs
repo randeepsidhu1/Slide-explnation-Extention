@@ -1,0 +1,94 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { chromium } from "playwright";
+import { makePdf } from "./fixtures.mjs";
+
+const profile = await mkdtemp(join(tmpdir(), "slide-study-browser-"));
+const extension = resolve("extension");
+let context;
+try {
+  context = await chromium.launchPersistentContext(profile, {
+    channel: "chromium", headless: true,
+    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
+  });
+  const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
+  const extensionId = new URL(worker.url()).hostname;
+  const errors = [];
+  context.on("page", (page) => page.on("pageerror", (error) => errors.push(error.message)));
+  const requests = [];
+  let mode = "success";
+  let release;
+  await context.route("http://127.0.0.1:8787/explain", async (route) => {
+    requests.push(route.request().postDataJSON());
+    if (mode === "slow") await new Promise((resolve) => { release = resolve; });
+    if (mode === "error") await route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Gemini free-tier limit reached." }) });
+    else await route.fulfill({ contentType: "application/json", body: JSON.stringify({ explanation: `Explanation for page ${route.request().postDataJSON().page.number}.` }) }).catch(() => {});
+  });
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const created = context.waitForEvent("page");
+  await popup.locator("#pdf").click();
+  const page = await created;
+  await page.waitForURL(`chrome-extension://${extensionId}/viewer/viewer.html`);
+  await page.locator("#file").setInputFiles({ name: "lesson.pdf", mimeType: "application/pdf", buffer: makePdf() });
+  await page.locator("#pdf-canvas:not([hidden])").waitFor();
+  await page.waitForFunction(() => document.getElementById("extraction").textContent.includes("Read 3 of 3"));
+  assert.match(await page.locator("#page-text").textContent(), /Fractions/);
+  assert.equal(requests.length, 0, "Opening and extracting a PDF must not call AI");
+  await page.locator("#next").click();
+  await page.waitForFunction(() => document.getElementById("page-text").textContent.includes("Gravity"));
+  await page.locator("#explain").click();
+  await page.waitForFunction(() => document.getElementById("answer").textContent === "Explanation for page 2.");
+  assert.equal(requests[0].page.number, 2);
+  assert.equal(requests[0].page.total, 3);
+  assert.match(requests[0].page.text, /Gravity/);
+  assert.doesNotMatch(requests[0].page.text, /Fractions|Photosynthesis/);
+  assert.match(requests[0].image, /^data:image\/jpeg;base64,/);
+  if (process.env.STUDY_SCREENSHOT) await page.screenshot({ path: process.env.STUDY_SCREENSHOT, fullPage: true });
+  await page.locator("#page").fill("3");
+  await page.locator("#page-form").evaluate((form) => form.requestSubmit());
+  await page.waitForFunction(() => document.getElementById("page-text").textContent.includes("Photosynthesis"));
+  await page.locator("#zoom").selectOption("1.5");
+  await page.locator("#explain:not([disabled])").waitFor();
+  mode = "slow";
+  await page.locator("#explain").click();
+  await page.waitForFunction(() => !document.getElementById("stop").hidden);
+  const navigationDeadline = Date.now() + 10000;
+  while (!release && Date.now() < navigationDeadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(release, "Explanation request started");
+  await page.locator("#previous").click();
+  release();
+  await page.waitForFunction(() => document.getElementById("page-text").textContent.includes("Gravity"));
+  assert.equal(await page.locator("#answer").textContent(), "Your explanation will appear here.");
+  mode = "error";
+  await page.locator("#explain").click();
+  await page.waitForFunction(() => document.getElementById("answer").textContent.includes("free-tier limit"));
+  mode = "success";
+  await page.locator("#explain").click();
+  await page.waitForFunction(() => document.getElementById("answer").textContent === "Explanation for page 2.");
+  await page.locator("#file").setInputFiles({ name: "not-a-pdf.pdf", mimeType: "application/pdf", buffer: Buffer.from("not a PDF") });
+  await page.waitForFunction(() => document.getElementById("notice").textContent.includes("valid PDF"));
+  await page.locator("#file").setInputFiles({ name: "blank.pdf", mimeType: "application/pdf", buffer: makePdf([""]) });
+  await page.waitForFunction(() => document.getElementById("page-text").textContent.includes("No extractable text"));
+  await page.locator("#explain").click();
+  await page.waitForFunction(() => document.getElementById("answer").textContent === "Explanation for page 1.");
+  assert.equal(requests.at(-1).page.text, "");
+  release = null;
+  mode = "slow";
+  await page.locator("#explain").click();
+  const stopDeadline = Date.now() + 10000;
+  while (!release && Date.now() < stopDeadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(release, "Explanation request started");
+  await page.locator("#stop").click();
+  mode = "success";
+  release();
+  assert.match(await page.locator("#answer").textContent(), /Request stopped/);
+  await page.locator("#explain:not([disabled])").waitFor();
+  assert.deepEqual(errors, [], "No uncaught browser exceptions");
+  console.log("Browser checks passed: popup entry, bundled PDF worker/rendering, all-page text extraction, navigation/zoom, selected-page payload, stop/stale-answer cancellation, provider error/retry, invalid PDF recovery, and image-only pages. No live provider requests were made.");
+} finally {
+  await context?.close();
+  await rm(profile, { recursive: true, force: true });
+}

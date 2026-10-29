@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF study · Explain this slide</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <header class="app-header">
+    <div><span class="eyebrow">EXPLAIN THIS SLIDE</span><h1>PDF study</h1></div>
+    <div class="file-info"><strong id="filename">Your next idea starts here.</strong><span id="file-meta">Open a PDF to get started.</span></div>
+    <label class="button" for="file">Open PDF</label>
+    <input id="file" class="file-input" type="file" accept=".pdf,application/pdf" aria-label="Open a local PDF">
+  </header>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <main class="workspace">
+    <section class="reader" aria-label="PDF reader">
+      <nav class="toolbar" aria-label="PDF navigation">
+        <button id="previous" disabled aria-label="Previous page">←</button>
+        <form id="page-form"><label for="page">Page</label> <input id="page" type="number" min="1" value="1" disabled> <span id="page-total">of 0</span></form>
+        <button id="next" disabled aria-label="Next page">→</button>
+        <label class="zoom-label" for="zoom">Zoom</label>
+        <select id="zoom" disabled><option value="fit">Fit width</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select>
+      </nav>
+      <div id="page-stage" class="page-stage" tabindex="0" aria-label="PDF page area">
+        <div id="empty" class="empty"><span class="document-symbol" aria-hidden="true">▤</span><h2>Make sense of the page.</h2><p>Open a local PDF, explore its pages, and get a clear explanation of the one you choose.</p><label class="button primary" for="file">Choose a PDF</label><p class="small">Up to 50 MiB · 500 pages</p></div>
+        <p id="render-status" role="status" hidden></p>
+        <canvas id="pdf-canvas" hidden aria-label="Rendered PDF page"></canvas>
+      </div>
+    </section>
+    <aside class="study" aria-label="Page explanation">
+      <span class="eyebrow">A LITTLE CLARITY</span><h2>Understand this page</h2>
+      <p class="muted">Walk through the idea, the unfamiliar terms, and the diagrams.</p>
+      <div id="context" class="context">No PDF selected</div>
+      <button id="explain" class="primary" disabled>Explain this page</button>
+      <button id="stop" hidden>Stop request</button>
+      <p class="small muted">Only this page’s image and extracted text are sent to Gemini through your local server when you click Explain.</p>
+      <section class="answer-section"><h3>Explanation</h3><div id="answer" class="answer" role="status" aria-live="polite">Your explanation will appear here.</div></section>
+      <details id="text-details"><summary>Page text &amp; document reading</summary><p id="extraction" class="small" role="status">Text extraction has not started.</p><pre id="page-text">No page selected.</pre></details>
+      <p class="small muted footer-note">This first version keeps the PDF and extracted text in this tab only. Closing or reloading it clears them. Whole-document questions and saved conversations are coming next.</p>
+    </aside>
+  </main>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>
