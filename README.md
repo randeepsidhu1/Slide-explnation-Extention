@@ -40,14 +40,27 @@ After updating the code, restart the backend and click **Reload** on the extensi
 1. Click the extension icon → **Open PDF study viewer**, or press **Alt+Shift+P**.
 2. Click **Open PDF** and choose a local PDF (up to 50 MiB and 500 pages).
 3. Use the arrows or page-number field to navigate; use the zoom control to adjust the page.
-4. Click **Explain this page**. The selected page's image and extracted text go through your backend to Gemini. Other pages are not sent.
+4. Click **Explain this page**. The selected page's image and extracted text go through your backend to Gemini, and the explanation appears in the conversation panel.
 5. Expand **Page text & document reading** to inspect the page text and progress through all pages. Extraction runs locally and does not call AI. Pages without extractable text use their rendered image for explanations.
 
-This increment supports local file selection, page rendering/navigation, all-page text extraction, and selected-page explanations. It does not yet provide whole-document questions, clickable citations, text selection, OCR, automatic import from an already open PDF tab, or saved conversations. PDFs requiring a password need an unlocked copy. The PDF, extracted text, and current explanation live only in the viewer tab; closing or reloading clears them. Clicking **Stop request** stops waiting for the result; the provider may already be processing it.
+### Ask questions and follow up
+
+- Type a question in the panel and click **Ask**, or press **⌘/Ctrl+Enter**. Follow up with another question, **Why?**, **Give an example**, or **Explain the equation**.
+- Choose **Current page** to use only that page as document evidence. **Explain this page** always uses this scope, regardless of the question selector.
+- Choose **Whole PDF** once local extraction finishes. Short PDFs supply all extracted text; longer PDFs use local lexical search across the document to select relevant passages. Up to three page images accompany the text. Search is based on words and recent question context; it does not guarantee finding every synonymous or indirectly related passage.
+- Click the blue **p. N** references to navigate to a cited physical PDF page. Hover a reference to preview its excerpt. Printed page labels can differ from physical page numbers.
+- Expand the context beneath an answer to see the supplied pages, image pages, text coverage, provider/model, and how many previous exchanges were included. Source validation checks that a reference belongs to supplied material; it cannot prove the model interpreted that material correctly.
+- Navigate and zoom without clearing earlier messages. Changing pages stops an unfinished question and keeps its cancelled state in the transcript. **Stop** also cancels an in-flight request. **New chat** clears the tab's current conversation.
+
+Recent complete exchanges are sent as conversation context, capped at 12 exchanges / 24000 characters. Earlier messages remain visible even when omitted from a request; failed and cancelled turns are not reused as answers. Current-page evidence remains restricted even if earlier discussion mentioned other pages.
+
+PDFs are limited to 50 MiB / 500 pages. Long documents use bounded excerpts (up to 64000 source-text characters), not an exhaustive review on every question. Full summaries/complete-list requests that exceed this budget stop with an explanation before calling AI; batch summaries are a later feature. Whole-PDF search cannot search scanned or unreadable text; coverage gaps are shown, and such pages can still be discussed through their image in **Current page** mode. Text selection, OCR, and automatic import from an already open PDF tab are not implemented. Password-protected PDFs need an unlocked copy.
+
+The PDF, index, and conversation live only in the viewer tab. Closing/reloading it or opening another PDF clears them; saved sessions across visits are the next step. Requests are stopped locally and cancellation is forwarded by the backend, but the provider may already have processed the request.
 
 ## Privacy and limits
 
-Capture happens only after selecting **Explain visible tab** or pressing its shortcut. The card is hidden before a new screenshot is taken. PDF import and text extraction stay local until you request an explanation. The extension and backend do not save PDFs, screenshots, explanations, or a history to disk. The backend does not log their contents. The Gemini API key stays in the backend environment and is never bundled into the extension.
+Capture happens only after selecting **Explain visible tab** or pressing its shortcut. The card is hidden before a new screenshot is taken. PDF import, text extraction, and search stay local. An explicit question sends the chosen sources, bounded page images, and selected conversation history through the backend to Google. The extension and backend do not save PDFs, screenshots, explanations, or history to disk. The backend does not log their contents. The Gemini API key stays in the backend environment and is never bundled into the extension.
 
 The screenshot is sent to Google. Google's [pricing page](https://ai.google.dev/gemini-api/docs/pricing) states that Free-tier content may be used to improve its products. Review the [Gemini API terms](https://ai.google.dev/gemini-api/terms) before capturing sensitive material.
 
@@ -71,4 +84,4 @@ npx playwright install chromium
 npm run test:browser # temporary browser profile, mocked AI; no key or running backend needed
 ```
 
-The browser check covers the actual unpacked extension, PDF worker/CSP, navigation and zoom, selected-page request contents, cancellation on page change, error recovery, and pages without text. Live Gemini availability/answer quality still requires a manual test with your configured local backend.
+The browser check covers the actual unpacked extension and real backend request validation with mocked AI inference: PDF rendering, navigation/zoom, page/whole-document context, distant-page retrieval, follow-up history, citation navigation, safe rendering, cancellation/retry, and isolation between documents. Live Gemini availability and answer/citation quality still require a manual test with your configured local backend.
