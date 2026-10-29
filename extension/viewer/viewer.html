@@ -29,16 +29,23 @@
         <canvas id="pdf-canvas" hidden aria-label="Rendered PDF page"></canvas>
       </div>
     </section>
-    <aside class="study" aria-label="Page explanation">
-      <span class="eyebrow">A LITTLE CLARITY</span><h2>Understand this page</h2>
-      <p class="muted">Walk through the idea, the unfamiliar terms, and the diagrams.</p>
+    <aside class="study" aria-label="PDF conversation">
+      <div class="chat-heading"><div><span class="eyebrow">A LITTLE CLARITY</span><h2>Ask your PDF</h2></div><button id="new-chat" class="small" disabled>New chat</button></div>
+      <p class="muted">Follow an idea across pages. Keep the conversation going.</p>
       <div id="context" class="context">No PDF selected</div>
-      <button id="explain" class="primary" disabled>Explain this page</button>
-      <button id="stop" hidden>Stop request</button>
-      <p class="small muted">Only this page’s image and extracted text are sent to Gemini through your local server when you click Explain.</p>
-      <section class="answer-section"><h3>Explanation</h3><div id="answer" class="answer" role="status" aria-live="polite">Your explanation will appear here.</div></section>
+      <button id="explain" disabled>Explain this page</button>
+      <div id="conversation" class="conversation" role="log" aria-label="Questions and answers"></div>
+      <div class="follow-ups"><button class="follow-up" data-question="Why is that the case?" disabled>Why?</button><button class="follow-up" data-question="Give me a concrete example of that." disabled>Give an example</button><button class="follow-up" data-question="Walk through the equation we are discussing, explaining each term." disabled>Explain the equation</button></div>
+      <form id="chat-form">
+        <label for="scope">Answer using</label>
+        <select id="scope"><option value="page">Current page</option><option id="whole-document" value="document" disabled>Whole PDF</option></select>
+        <label class="sr-only" for="question">Your question</label>
+        <textarea id="question" placeholder="Ask a question about this PDF…" maxlength="4000" rows="2" disabled></textarea>
+        <div class="composer-actions"><span class="small muted">⌘ / Ctrl + Enter to send</span><button id="send" class="primary" type="submit" disabled>Ask</button><button id="stop" type="button" hidden>Stop</button></div>
+      </form>
+      <p id="chat-status" class="small" role="status" aria-live="polite"></p>
       <details id="text-details"><summary>Page text &amp; document reading</summary><p id="extraction" class="small" role="status">Text extraction has not started.</p><pre id="page-text">No page selected.</pre></details>
-      <p class="small muted footer-note">This first version keeps the PDF and extracted text in this tab only. Closing or reloading it clears them. Whole-document questions and saved conversations are coming next.</p>
+      <details class="about-chat"><summary>About this chat &amp; privacy</summary><p class="small muted">Questions send the selected document context and recent complete exchanges through your local backend to Gemini. Expand an answer’s context to see the pages used.</p><p class="small muted">This conversation stays in this tab as you navigate. Closing, reloading, or opening another PDF clears it. Saving conversations across visits is the next step.</p></details>
     </aside>
   </main>
   <script type="module" src="viewer.js"></script>

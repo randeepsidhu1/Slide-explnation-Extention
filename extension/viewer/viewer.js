@@ -1,5 +1,8 @@
 import { getDocument, GlobalWorkerOptions } from "../vendor/pdfjs/build/pdf.min.mjs";
-import { MAX_PDF_BYTES, MAX_PAGES, MAX_PAGE_TEXT, validatePdfBytes, createTextStore, extractDocumentText } from "./document.js";
+import { MAX_PDF_BYTES, MAX_PAGES, validatePdfBytes, createTextStore, extractDocumentText } from "./document.js";
+
+import { buildIndex, prepareContext } from "./context.js";
+import { createChatPanel } from "./chat-panel.js";
 
 GlobalWorkerOptions.workerSrc = new URL("../vendor/pdfjs/build/pdf.worker.min.mjs", import.meta.url).href;
 const $ = (id) => document.getElementById(id);
@@ -9,8 +12,13 @@ let documentVersion = 0;
 let renderVersion = 0;
 let renderTask = null;
 let rendering = false;
-let request = null;
-let requestVersion = 0;
+const chat = createChatPanel({
+  buildRequest,
+  navigate: async (page) => {
+    await renderPage(page);
+    $("page-stage").focus();
+  }
+});
 
 function notice(text = "") {
   $("notice").textContent = text;
@@ -23,22 +31,17 @@ function controls() {
   $("next").disabled = !ready || session.pageNumber >= session.pdf.numPages;
   $("page").disabled = !ready;
   $("zoom").disabled = !ready;
-  $("explain").disabled = !ready || Boolean(request);
-  $("stop").hidden = !request;
-}
-
-function cancelRequest() {
-  requestVersion++;
-  request?.abort();
-  request = null;
-  controls();
+  chat.setAvailability({
+    ready: ready && session.renderedPage === session.pageNumber,
+    indexed: Boolean(session?.index), page: session?.pageNumber
+  });
 }
 
 async function openFile(file) {
   if (!file) return;
   const version = ++documentVersion;
   renderVersion++;
-  cancelRequest();
+  chat.reset();
   renderTask?.cancel();
   session = null;
   rendering = false;
@@ -48,8 +51,6 @@ async function openFile(file) {
   $("empty").hidden = true;
   $("filename").textContent = file.name;
   $("file-meta").textContent = "Opening PDF…";
-  $("answer").textContent = "Your explanation will appear here.";
-  $("answer").classList.remove("error");
   $("page-text").textContent = "No page selected.";
   $("context").textContent = "No PDF selected";
   $("page-total").textContent = "of 0";
@@ -92,7 +93,7 @@ async function openFile(file) {
       await task.destroy();
       throw new Error("This first version supports PDFs with up to 500 pages.");
     }
-    session = { pdf, pageNumber: 1, text: createTextStore(pdf), version };
+    session = { pdf, pageNumber: 1, text: createTextStore(pdf), version, pages: [] };
     $("page").max = pdf.numPages;
     $("page-total").textContent = `of ${pdf.numPages}`;
     $("file-meta").textContent = `${pdf.numPages} pages · ${(file.size / 1024 / 1024).toFixed(1)} MiB · Local to this tab`;
@@ -102,9 +103,12 @@ async function openFile(file) {
     extractDocumentText(pdf, active.text, {
       isCurrent: () => session === active,
       onProgress: (pages) => {
+        active.pages = pages;
+        if (pages.length === pdf.numPages) active.index = buildIndex(pages);
         const unreadable = pages.filter((page) => page.status === "no-text").length;
         const failed = pages.filter((page) => page.status === "error").length;
-        $("extraction").textContent = `Read ${pages.length} of ${pdf.numPages} pages locally. ${unreadable} without extractable text; ${failed} failed. Scanned pages can still be explained using their image. OCR and document-wide questions are not available yet.`;
+        $("extraction").textContent = `Read ${pages.length} of ${pdf.numPages} pages locally. ${unreadable} without extractable text; ${failed} failed. Scanned pages can still be explained using their image. Whole-PDF questions search extracted text; pages without text cannot be searched. Use their page image in Current page mode.`;
+        controls();
       }
     }).catch(() => {});
     await renderPage(1);
@@ -121,14 +125,12 @@ async function renderPage(pageNumber) {
   const active = session;
   if (!active || !Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > active.pdf.numPages) return;
   const version = ++renderVersion;
-  cancelRequest();
+  if (active.pageNumber !== pageNumber) chat.cancel("Stopped because you changed pages. Your earlier answers are still available.");
   active.pageNumber = pageNumber;
   rendering = true;
   controls();
   $("page").value = pageNumber;
   $("context").textContent = `Current page · ${pageNumber} of ${active.pdf.numPages}`;
-  $("answer").textContent = "Your explanation will appear here.";
-  $("answer").classList.remove("error");
   $("pdf-canvas").hidden = true;
   $("render-status").textContent = `Rendering page ${pageNumber}…`;
   $("render-status").hidden = false;
@@ -179,62 +181,48 @@ async function renderPage(pageNumber) {
   }
 }
 
-async function explainPage() {
+async function renderPageImage(pdf, pageNumber, signal) {
+  signal.throwIfAborted();
+  const page = await pdf.getPage(pageNumber);
+  signal.throwIfAborted();
+  const natural = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: Math.min(2, 1800 / Math.max(natural.width, natural.height)) });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const task = page.render({ canvasContext: canvas.getContext("2d"), viewport, background: "rgb(255,255,255)" });
+  const abort = () => task.cancel();
+  signal.addEventListener("abort", abort, { once: true });
+  try { await task.promise; }
+  finally { signal.removeEventListener("abort", abort); }
+  signal.throwIfAborted();
+  const data = canvas.toDataURL("image/jpeg", 0.8);
+  canvas.width = canvas.height = 0;
+  if (data.length > 3 * 1024 * 1024) throw new Error("A page image is too large. Try a different page or PDF.");
+  return { sourceId: `p${pageNumber}_image`, data };
+}
+
+async function buildRequest({ question, mode, page, history, previousSources, signal }) {
   const active = session;
-  if (!active || rendering || request || active.renderedPage !== active.pageNumber) return;
-  const pageNumber = active.pageNumber;
-  const version = ++requestVersion;
-  const controller = new AbortController();
-  request = controller;
-  controls();
-  $("answer").textContent = `Reading page ${pageNumber}…`;
-  $("answer").classList.remove("error");
-  const timeout = setTimeout(() => controller.abort("timeout"), 70000);
-  try {
-    const text = await active.text.read(pageNumber).catch(() => "");
-    if (version !== requestVersion) return;
-    if (text.length > MAX_PAGE_TEXT) throw new Error("This page contains too much text to send safely. Try screenshot mode or a smaller PDF page.");
-    // Render at a stable resolution independent of display zoom.
-    const page = await active.pdf.getPage(pageNumber);
-    if (version !== requestVersion) return;
-    controller.signal.throwIfAborted();
-    const natural = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: Math.min(2, 2200 / Math.max(natural.width, natural.height)) });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const task = page.render({ canvasContext: canvas.getContext("2d"), viewport, background: "rgb(255,255,255)" });
-    const abortRender = () => task.cancel();
-    controller.signal.addEventListener("abort", abortRender, { once: true });
-    try {
-      controller.signal.throwIfAborted();
-      await task.promise;
-    } finally {
-      controller.signal.removeEventListener("abort", abortRender);
-    }
-    if (version !== requestVersion) return;
-    const response = await fetch("http://127.0.0.1:8787/explain", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: canvas.toDataURL("image/jpeg", 0.85), page: { number: pageNumber, total: active.pdf.numPages, text } }),
-      signal: controller.signal
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Backend error (${response.status}).`);
-    if (typeof result.explanation !== "string") throw new Error("The backend returned an invalid explanation.");
-    if (version !== requestVersion || session !== active) return;
-    $("answer").textContent = result.explanation;
-  } catch (error) {
-    if (version !== requestVersion || session !== active) return;
-    $("answer").classList.add("error");
-    $("answer").textContent = controller.signal.aborted ? "The request timed out. Try again." :
-      error instanceof TypeError && error.message === "Failed to fetch" ? "Could not reach your local backend. Start it with npm start inside backend/ and try again." : error.message || "Could not explain this page.";
-  } finally {
-    clearTimeout(timeout);
-    if (version === requestVersion) {
-      request = null;
-      controls();
-    }
+  if (!active) throw new Error("Open a PDF first.");
+  if (mode === "document" && !active.index) throw new Error("Wait for all pages to finish reading before asking a whole-PDF question.");
+  let index = active.index;
+  if (!index) {
+    const text = await active.text.read(page).catch(() => "");
+    index = buildIndex([{ pageNumber: page, text, status: text ? "text" : "no-text" }]);
   }
+  const prepared = prepareContext({ index, mode, question, currentPage: page, history, previousSources });
+  prepared.receipt.totalPages = active.pdf.numPages;
+  const images = [];
+  for (const number of prepared.imagePages) {
+    signal.throwIfAborted();
+    images.push(await renderPageImage(active.pdf, number, signal));
+  }
+  if (session !== active) throw new Error("The active PDF changed. Ask again in the new document.");
+  return {
+    sources: prepared.sources, receipt: prepared.receipt,
+    payload: { question, mode, currentPage: page, totalPages: active.pdf.numPages, sources: prepared.sources, images, history }
+  };
 }
 
 $("file").addEventListener("change", () => {
@@ -251,15 +239,10 @@ $("page-form").addEventListener("submit", (event) => {
   else if (session) $("page").value = session.pageNumber;
 });
 $("zoom").addEventListener("change", () => renderPage(session.pageNumber));
-$("explain").addEventListener("click", explainPage);
-$("stop").addEventListener("click", () => {
-  cancelRequest();
-  $("answer").textContent = "Request stopped. You can explain this page again.";
-});
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "explain-pdf-page") explainPage();
+  if (message.type === "explain-pdf-page") chat.explain();
 });
 window.addEventListener("pagehide", () => {
-  cancelRequest();
+  chat.cancel();
   loadingTask?.destroy().catch(() => {});
 });
