@@ -7,7 +7,7 @@ This prototype uses **Gemini's Free tier**. It does not use a ChatGPT subscripti
 ## Requirements
 
 - Chrome
-- Node.js 20 or newer
+- Node.js 20.6 or newer (needed for built-in `.env` loading)
 - A Gemini API key from a Google AI Studio project with **Free** shown as its billing tier and **no billing account attached**
 
 The backend uses `gemini-3.5-flash-lite`, which Google lists with Free-tier pricing and image input. [Model details](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite), [pricing](https://ai.google.dev/gemini-api/docs/pricing). Gemini billing is determined by the key's project. This application cannot inspect a key's billing tier itself, so **you must verify the project in [Google AI Studio Projects](https://aistudio.google.com/app/projects) before using the key**. Do not link billing or upgrade that project. Google documents that upgrading to paid requires linking a billing account, while an unbilled project remains on the Free tier. [Gemini billing guide](https://ai.google.dev/gemini-api/docs/billing).
@@ -16,15 +16,17 @@ The backend uses `gemini-3.5-flash-lite`, which Google lists with Free-tier pric
 
 1. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and select the `extension` folder in this repository.
 2. Copy the extension's 32-character **ID** shown on that page.
-3. In PowerShell, set these values for this terminal session:
+3. Open `backend/.env` (created for local setup). On a fresh clone, copy `backend/.env.example` to `backend/.env` first. Fill in these values:
 
-   ```powershell
-   $env:EXTENSION_ID = "your-extension-id"
-   $env:GEMINI_API_KEY = "your-key-from-an-unbilled-project"
-   $env:GEMINI_UNBILLED_PROJECT_CONFIRMED = "1"
+   ```dotenv
+   GEMINI_API_KEY=your-key-from-an-unbilled-project
+   EXTENSION_ID=your-extension-id
+   GEMINI_UNBILLED_PROJECT_CONFIRMED=1
    ```
 
-4. Start the backend: `cd backend` then `npm start`. No package installation is needed.
+   Set the confirmation to `1` only after verifying the project is unbilled. The `.env` file is ignored by Git; keep the real key there, never in `.env.example` or the extension source. Existing terminal environment variables take precedence over `.env` values.
+
+4. From the repository root, run `cd backend` then `npm start`. The startup command automatically loads `backend/.env`; no package installation or shell-specific environment commands are needed. Restart the backend after changing `.env`.
 5. Open learning material and click **Explain this slide**, or use **Alt+Shift+E**. Change the shortcut at `chrome://extensions/shortcuts`.
 
 The backend listens only on `127.0.0.1:8787` and accepts requests from the configured extension ID. Keep it running while using the extension. Each trigger captures only the visible portion of the selected tab, not the whole document. On a PDF, navigate to the desired page before triggering. Chrome does not permit injection into some pages, including its PDF viewer, `chrome://` pages, and the Web Store. The extension window handles the first two when capture is permitted; Chrome may still refuse capture on protected pages.
