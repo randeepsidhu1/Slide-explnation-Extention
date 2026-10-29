@@ -6,7 +6,10 @@ export function makePdf(texts = ["Fractions describe parts of a whole.", "Gravit
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
   ];
   texts.forEach((text, i) => {
-    const content = text ? `BT /F1 18 Tf 40 700 Td (${text.replace(/[\\()]/g, "\\$&")}) Tj ET` : "";
+    const escape = (line) => line.replace(/[\\()]/g, "\\$&");
+    const lines = text.match(/.{1,75}(?:\s|$)|.{1,75}/g) || [];
+    const content = text.length > 120 ? `BT /F1 10 Tf 12 TL 35 750 Td ${lines.map((line, i) => `${i ? "T* " : ""}(${escape(line)}) Tj`).join("\n")} ET` :
+      text ? `BT /F1 18 Tf 40 700 Td (${escape(text)}) Tj ET` : "";
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`);
     objects.push(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`);
   });
