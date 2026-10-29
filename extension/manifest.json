@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Explain This Slide",
+  "version": "0.1.0",
+  "description": "Get a concise, teacher-style explanation of the visible tab.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8787/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Explain this slide" },
+  "commands": {
+    "explain-slide": {
+      "suggested_key": { "default": "Alt+Shift+E" },
+      "description": "Explain the visible slide or page"
+    }
+  }
+}
