@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --env-file=.env server.js",
     "test": "node --test"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20.6.0" }
 }

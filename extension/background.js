@@ -2,17 +2,27 @@ const API_URL = "http://127.0.0.1:8787/explain";
 let current = { requestId: 0, status: "idle", text: "", tabId: null };
 let fallbackWindowId = null;
 
-chrome.action.onClicked.addListener((tab) => explain(tab));
 chrome.commands.onCommand.addListener(async (command) => {
+  if (command === "open-pdf") {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html") });
+    return;
+  }
   if (command !== "explain-slide") return;
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.url === chrome.runtime.getURL("fallback.html") && current.tabId !== null) {
     tab = await chrome.tabs.get(current.tabId).catch(() => null);
   }
-  if (tab) explain(tab);
+  if (tab) explainTarget(tab);
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "explain-active-tab" && sender.url === chrome.runtime.getURL("popup.html")) {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      if (tab) explainTarget(tab);
+    });
+    sendResponse({ ok: true });
+    return;
+  }
   if (message.type === "get-state") {
     sendResponse(current);
     return;
@@ -23,6 +33,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
   }
 });
+
+async function explainTarget(tab) {
+  if (tab.url === chrome.runtime.getURL("viewer/viewer.html")) {
+    await chrome.tabs.sendMessage(tab.id, { type: "explain-pdf-page" }).catch(() => {});
+    return;
+  }
+  await explain(tab);
+}
 
 async function sendToCard(tabId, message) {
   try {

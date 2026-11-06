@@ -1,16 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Explain This Slide",
-  "version": "0.1.0",
-  "description": "Get a concise, teacher-style explanation of the visible tab.",
+  "version": "0.3.0",
+  "description": "Ask questions across a PDF with page references, or explain the visible tab.",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["http://127.0.0.1:8787/*"],
   "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Explain this slide" },
+  "action": { "default_title": "Explain this slide", "default_popup": "popup.html" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'"
+  },
   "commands": {
     "explain-slide": {
       "suggested_key": { "default": "Alt+Shift+E" },
-      "description": "Explain the visible slide or page"
+      "description": "Explain the visible slide or PDF study page"
+    },
+    "open-pdf": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Open the PDF study viewer"
     }
   }
 }

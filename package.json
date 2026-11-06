@@ -1,0 +1,15 @@
+{
+  "name": "explain-this-slide",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vendor": "node scripts/vendor-pdfjs.mjs",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node tests/browser.mjs"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "6.4.299",
+    "playwright": "1.58.2"
+  },
+  "engines": { "node": ">=22.13.0" }
+}

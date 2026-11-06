@@ -1,0 +1,6 @@
+body { width: 285px; margin: 0; padding: 18px; box-sizing: border-box; color: #17212b; background: #f8fafc; font: 14px/1.5 system-ui, sans-serif; }
+strong { font-size: 16px; }
+p { color: #526176; font-size: 12px; margin: 6px 0 16px; }
+button { display: block; width: 100%; text-align: left; margin-top: 8px; padding: 12px; border: 1px solid #d9e1e8; border-radius: 8px; background: white; color: #17212b; cursor: pointer; font: inherit; }
+button:hover, button:focus-visible { border-color: #3563d1; outline-color: #3563d1; }
+small { display: block; color: #526176; margin-top: 3px; }
